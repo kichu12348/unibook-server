@@ -332,7 +332,6 @@ export async function createForum(
  * This route is accessible by any authenticated user within a college.
  */
 export async function getForums(request: FastifyRequest, reply: FastifyReply) {
-  // 1. Get the user's collegeId from their JWT payload
   const { collegeId } = request.user;
 
   if (!collegeId) {
@@ -341,19 +340,13 @@ export async function getForums(request: FastifyRequest, reply: FastifyReply) {
       .send({ error: "Forbidden: No college associated with this account." });
   }
 
-  // 2. Fetch all forums for the college using a relational query
-  // This query also fetches the associated heads for each forum and the user details for each head.
-  // NOTE: This requires you to have defined relations in your Drizzle schema.
   const collegeForums = await db.query.forums.findMany({
     where: eq(forums.collegeId, collegeId),
     with: {
       forum_heads: {
-        // The relation to the join table
         with: {
           user: {
-            // The relation from the join table to the user
             columns: {
-              // Select only the necessary, non-sensitive user fields
               id: true,
               fullName: true,
             },
