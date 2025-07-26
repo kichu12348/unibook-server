@@ -8,9 +8,12 @@ import superAdminRoutes from "./routes/superAdminRoutes";
 import collegeAdminRoutes from "./routes/collegeAdminRoutes";
 import forumRoutes from "./routes/forumRoutes";
 
-import { verifyCollegeAdmin, verifySuperAdmin,verifyForumHead } from "./middlewares/checkRole";
+import {
+  verifyCollegeAdmin,
+  verifySuperAdmin,
+  verifyForumHead,
+} from "./middlewares/checkRole";
 import { verifyToken } from "./middlewares/authMiddleware";
-
 
 dotenv.config();
 
@@ -37,17 +40,17 @@ app.get("/health", async (_, res) => {
 app.register(userRoutes, { prefix: "/api/v1/auth" });
 app.register(superAdminRoutes, {
   prefix: "/api/v1/sa",
-  onRequest: [verifyToken],
+  onRequest: verifyToken,
   preHandler: verifySuperAdmin,
 });
 app.register(collegeAdminRoutes, {
   prefix: "/api/v1/admin",
-  onRequest: [verifyToken],
+  onRequest: verifyToken,
   preHandler: verifyCollegeAdmin,
 });
 app.register(forumRoutes, {
   prefix: "/api/v1/forums",
-  onRequest: [verifyToken],
+  onRequest: verifyToken,
   preHandler: verifyForumHead,
 });
 
