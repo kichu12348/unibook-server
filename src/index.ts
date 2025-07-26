@@ -37,15 +37,18 @@ app.get("/health", async (_, res) => {
 app.register(userRoutes, { prefix: "/api/v1/auth" });
 app.register(superAdminRoutes, {
   prefix: "/api/v1/sa",
-  onRequest: [verifyToken, verifySuperAdmin],
+  onRequest: [verifyToken],
+  preHandler: verifySuperAdmin,
 });
 app.register(collegeAdminRoutes, {
   prefix: "/api/v1/admin",
-  onRequest: [verifyToken, verifyCollegeAdmin],
+  onRequest: [verifyToken],
+  preHandler: verifyCollegeAdmin,
 });
 app.register(forumRoutes, {
   prefix: "/api/v1/forums",
-  onRequest: [verifyToken, verifyForumHead],
+  onRequest: [verifyToken],
+  preHandler: verifyForumHead,
 });
 
 // Start the server
