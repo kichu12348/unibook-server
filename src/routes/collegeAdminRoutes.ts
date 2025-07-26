@@ -9,6 +9,8 @@ import {
   getForums,
 } from "../controllers/collegeAdminController";
 
+import { checkHasPaid } from "../middlewares/checkHasPaid";
+
 const approveOrRejectOrDeleteSchema = {
   params: {
     type: "object",
@@ -79,20 +81,20 @@ export default async function collegeAdminRoutes(app: FastifyInstance) {
   app.get("/users", getUsersForCollegeAdmin);
   app.put(
     "/users/:userId/approve",
-    { schema: approveOrRejectOrDeleteSchema },
+    { schema: approveOrRejectOrDeleteSchema, preHandler: checkHasPaid },
     approveUser
   );
   app.put(
     "/users/:userId/reject",
-    { schema: approveOrRejectOrDeleteSchema },
+    { schema: approveOrRejectOrDeleteSchema, preHandler: checkHasPaid },
     rejectUser
   );
   app.delete(
     "/users/:userId",
-    { schema: approveOrRejectOrDeleteSchema },
+    { schema: approveOrRejectOrDeleteSchema, preHandler: checkHasPaid },
     deleteUser
   );
-  app.post("/venues", { schema: venueSchema }, createVenue);
-  app.post("/forums", { schema: forumSchema }, createForum);
+  app.post("/venues", { schema: venueSchema, preHandler: checkHasPaid }, createVenue);
+  app.post("/forums", { schema: forumSchema, preHandler: checkHasPaid }, createForum);
   app.get("/forums", getForums);
 }
