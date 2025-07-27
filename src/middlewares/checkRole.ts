@@ -35,3 +35,15 @@ export async function verifyForumHead(
   }
   return;
 }
+
+export async function verifyTeacher(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const user = request.user;
+
+  if (!user || user.role !== "teacher") {
+    return reply.code(403).send({ error: "Forbidden: You aint allowed here boi onli teachers" });
+  }
+  return;
+}

@@ -7,13 +7,17 @@ import userRoutes from "./routes/userRoutes";
 import superAdminRoutes from "./routes/superAdminRoutes";
 import collegeAdminRoutes from "./routes/collegeAdminRoutes";
 import forumRoutes from "./routes/forumRoutes";
+import teacherRoutes from "./routes/teacherRoutes";
+import publicRoutes from "./routes/publicRoutes";
 
 import {
   verifyCollegeAdmin,
   verifySuperAdmin,
   verifyForumHead,
+  verifyTeacher
 } from "./middlewares/checkRole";
 import { verifyToken } from "./middlewares/authMiddleware";
+import { checkHasPaid } from "./middlewares/checkHasPaid";
 
 dotenv.config();
 
@@ -51,7 +55,16 @@ app.register(collegeAdminRoutes, {
 app.register(forumRoutes, {
   prefix: "/api/v1/forums",
   onRequest: verifyToken,
-  preHandler: verifyForumHead,
+  preHandler: [checkHasPaid, verifyForumHead],
+});
+app.register(teacherRoutes, {
+  prefix: "/api/v1/teachers",
+  onRequest: verifyToken,
+  preHandler: [verifyTeacher, checkHasPaid],
+});
+app.register(publicRoutes, {
+  prefix: "/api/v1/public",
+  onRequest: verifyToken,
 });
 
 // Start the server

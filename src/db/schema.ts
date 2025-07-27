@@ -97,6 +97,7 @@ export const events = pgTable("events", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   bannerImage: text("banner_image"),
+  registrationLink: text("registration_link"),
   collegeId: uuid("college_id")
     .notNull()
     .references(() => colleges.id, { onDelete: "cascade" }),
@@ -112,13 +113,16 @@ export const eventStaffAssignments = pgTable(
   "event_staff_assignments",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    assignmentRole: text("assignment_role"),
+    assignmentRole: text("assignment_role").default("staff in charge"),
+    status: approvalStatusEnum("status")
+      .default("pending"),
     eventId: uuid("event_id")
       .notNull()
       .references(() => events.id, { onDelete: "cascade" }),
     userId: uuid("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
     {
