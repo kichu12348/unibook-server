@@ -19,13 +19,14 @@ export async function createEvent(
 ) {
   const { id: organizerId, collegeId } = request.user;
 
-  const { name, description, startTime, endTime, venueId, registrationLink } = request.body as {
+  const { name, description, startTime, endTime, venueId, registrationLink, bannerImage } = request.body as {
     name: string;
     description?: string;
     startTime: string;
     endTime: string;
     venueId?: string;
     registrationLink?: string;
+    bannerImage?: string;
   };
 
   if (!name || !startTime || !endTime) {
@@ -78,6 +79,7 @@ export async function createEvent(
           organizerId,
           collegeId,
           registrationLink,
+          bannerImage,
           status: "confirmed",
         })
         .returning();
@@ -223,6 +225,7 @@ export async function updateEvent(
     endTime: string;
     venueId: string | null;
     registrationLink: string | null;
+    bannerImage: string | null;
   }>;
 
   if (!collegeId) {
@@ -308,6 +311,7 @@ export async function updateEvent(
             : undefined,
           venueId: updateData.venueId,
           registrationLink: updateData.registrationLink,
+          bannerImage: updateData.bannerImage,
         })
         .where(eq(events.id, eventId))
         .returning();

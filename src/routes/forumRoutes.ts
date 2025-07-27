@@ -23,6 +23,7 @@ const createForumSchema = {
       endTime: { type: "string", format: "date-time" },
       venueId: { type: "string", nullable: true },
       registrationLink: { type: "string", nullable: true },
+      bannerImage: { type: "string", nullable: true },
     },
   },
 };
@@ -43,6 +44,7 @@ const updateForumSchema = {
       endTime: { type: "string", format: "date-time", nullable: true },
       venueId: { type: "string", nullable: true },
       registrationLink: { type: "string", nullable: true },
+      bannerImage: { type: "string", nullable: true },
     },
   },
 };
