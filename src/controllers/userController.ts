@@ -124,11 +124,9 @@ export async function verifyOtpAndLogin(
     .returning();
   if (updatedUser.approvalStatus === "approved") {
     const jwtToken = request.server.jwt.sign({
-      user: {
         id: updatedUser.id,
         role: updatedUser.role,
         collegeId: updatedUser.collegeId,
-      },
     });
     return {
       message: "Email verified successfully.",
@@ -162,10 +160,8 @@ export async function login(request: FastifyRequest, reply: FastifyReply) {
     );
     if (match) {
       const token = request.server.jwt.sign({
-        user: {
           id: potentialSuperAdmin.id,
           role: "super_admin",
-        },
       });
       return { token };
     }
@@ -196,11 +192,9 @@ export async function login(request: FastifyRequest, reply: FastifyReply) {
   const match = await bcrypt.compare(password, user.passwordHash);
   if (match) {
     const token = request.server.jwt.sign({
-      user: {
         id: user.id,
         role: user.role,
         collegeId: user.collegeId,
-      },
     });
     return { token };
   }
@@ -221,7 +215,6 @@ export async function getMe(request: FastifyRequest, reply: FastifyReply) {
         createdAt: true,
       },
     });
-
     if (!superAdminProfile) {
       return reply.code(404).send({ error: "Super admin profile not found." });
     }

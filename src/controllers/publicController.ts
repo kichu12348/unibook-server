@@ -278,3 +278,36 @@ export async function getMyCollegeDetails(
   // 3. Return the college details
   return collegeDetails;
 }
+
+
+export async function getAllColleges(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  // Fetch all colleges from the database
+  const collegeList = await db.query.colleges.findMany({
+    orderBy: (colleges, { desc }) => [desc(colleges.createdAt)],
+  });
+
+  if (!collegeList || collegeList.length === 0) {
+    return reply.code(404).send({ error: "No colleges found." });
+  }
+
+  return reply.code(200).send(collegeList);
+}
+
+export async function getForumsOfCollegeId(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { collegeId } = request.params as { collegeId: string };
+  const forumsList = await db.query.forums.findMany({
+    where: eq(forums.collegeId, collegeId),
+    orderBy: (forums, { asc }) => [asc(forums.name)],
+    columns:{
+      name: true,
+      id: true,
+    }
+  });
+  return reply.code(200).send(forumsList);
+}

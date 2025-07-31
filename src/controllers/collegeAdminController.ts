@@ -1,7 +1,7 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { db } from "../db";
 import { users, venues, forums, forum_heads } from "../db/schema";
-import { and, ne, eq, inArray } from "drizzle-orm";
+import { and, ne, eq, inArray,ilike, } from "drizzle-orm";
 
 /**
  * Handles the GET /admin/users route.
@@ -13,13 +13,6 @@ export async function getUsersForCollegeAdmin(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
-  // Authorization: Ensure the user is a College Admin
-  if (request.user.role !== "college_admin") {
-    return reply.code(403).send({
-      error: "Forbidden: You do not have permission to perform this action.",
-    });
-  }
-
   // Get the admin's collegeId from their JWT payload
   const { collegeId, id } = request.user;
 
@@ -47,6 +40,7 @@ export async function getUsersForCollegeAdmin(
     },
     orderBy: (users, { desc }) => [desc(users.createdAt)],
   });
+
 
   return collegeUsers;
 }
@@ -325,6 +319,41 @@ export async function createForum(
   return reply.code(201).send(newForum);
 }
 
+/*
+  *handles the PUT /forums/:forumId/update route.
+  *Updates the details of an existing forum.
+  *This route is accessible only by a 'college_admin'.
+ */
+
+export async function updateForum(
+  request: FastifyRequest,
+  reply: FastifyReply){
+  const { role: adminRole, collegeId: adminCollegeId } = request.user;
+  if (adminRole !== "college_admin") {
+    return reply.code(403).send({
+      error: "Forbidden: You do not have permission to update forums.",
+    });
+  }
+
+  const { forumId } = request.params as { forumId: string };
+  const { name, description } = request.body as {name?: string; description?: string};
+
+  if (!forumId) {
+    return reply.code(400).send({ error: "Forum ID is required." });
+  }
+
+  const [updatedForum] = await db
+    .update(forums)
+    .set({
+      name,
+      description,
+    })
+    .where(eq(forums.id, forumId))
+    .returning();
+
+  return reply.code(200).send(updatedForum);
+}
+
 /**
  * Handles the GET /forums route.
  * Fetches a list of all forums for the user's college, including the
@@ -357,6 +386,8 @@ export async function getForums(request: FastifyRequest, reply: FastifyReply) {
     orderBy: (forums, { asc }) => [asc(forums.name)],
   });
 
+  console.log("Fetched forums:", collegeForums);
+
   // Format the response to be more ooser-friendly
   const formattedForums = collegeForums.map((forum) => ({
     id: forum.id,
@@ -369,4 +400,96 @@ export async function getForums(request: FastifyRequest, reply: FastifyReply) {
   }));
 
   return formattedForums;
+}
+
+
+export async function getForumById(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { forumId } = request.params as { forumId: string };
+  const { collegeId } = request.user;
+
+  if (!collegeId) {
+    return reply.code(403).send({
+      error: "Forbidden: No college associated with this account.",
+    });
+  }
+
+  const forum = await db.query.forums.findFirst({
+    where: and(eq(forums.id, forumId), eq(forums.collegeId, collegeId)),
+    with: {
+      forum_heads: {
+        with: {
+          user: {
+            columns: {
+              id: true,
+              fullName: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!forum) {
+    return reply.code(404).send({ error: "Forum not found." });
+  }
+
+  return {
+    id: forum.id,
+    name: forum.name,
+    description: forum.description,
+    createdAt: forum.createdAt,
+    heads: (forum.forum_heads as { user: { id: string; fullName: string } }[])
+      .map((fh) => fh.user)
+      .filter(Boolean),
+  };
+}
+
+export async function searchUsersForCollegeAdmin(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+
+  // 1. Get the search query from the request URL (e.g., /users?search=John)
+  const { search } = request.query as { search?: string };
+
+  const { collegeId, id } = request.user;
+  if (!collegeId) {
+    return reply.code(403).send({
+      error: "Forbidden: No college associated with this admin account.",
+    });
+  }
+
+  // 2. Build the query conditions dynamically
+  const conditions = [
+    eq(users.collegeId, collegeId),
+    ne(users.id, id),
+    ne(users.role, "college_admin"),
+    eq(users.approvalStatus, "approved"),
+    eq(users.role, "student"), // Only search for students
+  ];
+
+  // 3. If a search term is provided, add the 'ilike' condition
+  if (search) {
+    conditions.push(ilike(users.fullName, `%${search}%`));
+  }
+  
+  // Fetch users using the combined conditions
+  const collegeUsers = await db.query.users.findMany({
+    where: and(...conditions), // Use the spread operator to apply all conditions
+    columns: {
+      id: true,
+      fullName: true,
+      email: true,
+      role: true,
+      approvalStatus: true,
+      isEmailVerified: true,
+      createdAt: true,
+    },
+    orderBy: (users, { desc }) => [desc(users.createdAt)],
+  });
+
+  return collegeUsers;
 }

@@ -7,9 +7,14 @@ import {
   createVenue,
   createForum,
   getForums,
+  updateForum,
+  searchUsersForCollegeAdmin,
+  getForumById,
 } from "../controllers/collegeAdminController";
 
 import { checkHasPaid } from "../middlewares/checkHasPaid";
+import { verifyToken } from "../middlewares/authMiddleware";
+import { verifyCollegeAdmin } from "../middlewares/checkRole";
 
 const approveOrRejectOrDeleteSchema = {
   params: {
@@ -78,23 +83,41 @@ const forumSchema = {
 };
 
 export default async function collegeAdminRoutes(app: FastifyInstance) {
+  app.addHook("onRequest", verifyToken);
+  app.addHook("preHandler", verifyCollegeAdmin);
+
   app.get("/users", getUsersForCollegeAdmin);
   app.put(
     "/users/:userId/approve",
-    { schema: approveOrRejectOrDeleteSchema, preHandler: checkHasPaid },
+    { schema: approveOrRejectOrDeleteSchema, preHandler: [checkHasPaid] },
     approveUser
   );
   app.put(
     "/users/:userId/reject",
-    { schema: approveOrRejectOrDeleteSchema, preHandler: checkHasPaid },
+    { schema: approveOrRejectOrDeleteSchema, preHandler: [checkHasPaid] },
     rejectUser
   );
   app.delete(
     "/users/:userId",
-    { schema: approveOrRejectOrDeleteSchema, preHandler: checkHasPaid },
+    { schema: approveOrRejectOrDeleteSchema, preHandler: [checkHasPaid] },
     deleteUser
   );
-  app.post("/venues", { schema: venueSchema, preHandler: checkHasPaid }, createVenue);
-  app.post("/forums", { schema: forumSchema, preHandler: checkHasPaid }, createForum);
+  app.post(
+    "/venues",
+    { schema: venueSchema, preHandler: [checkHasPaid] },
+    createVenue
+  );
+  app.post(
+    "/forums",
+    { schema: forumSchema, preHandler: [checkHasPaid] },
+    createForum
+  );
+  app.put(
+    "/forums/:forumId/update",
+    { preHandler: [checkHasPaid] },
+    updateForum
+  );
   app.get("/forums", getForums);
+  app.get("/forums/:forumId", getForumById);
+  app.get("/users/search", searchUsersForCollegeAdmin);
 }

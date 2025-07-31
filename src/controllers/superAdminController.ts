@@ -1,6 +1,6 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { db } from "../db";
-import { colleges, users } from "../db/schema";
+import { colleges, superAdmins, users } from "../db/schema";
 import { and, eq } from "drizzle-orm";
 import { CreateCollegeAdminBody, CreateCollegeBody } from "./utils/types";
 import bcrypt from "bcrypt";
@@ -32,7 +32,7 @@ export async function createCollege(
       .send({ error: "A college with this domain name already exists." });
   }
 
-  const [newCollege] = await db
+  const newCollege = await db
     .insert(colleges)
     .values({
       name,
@@ -51,7 +51,6 @@ export async function getColleges(
   const collegeList = await db.query.colleges.findMany({
     orderBy: (colleges, { desc }) => [desc(colleges.createdAt)],
   });
-
   return reply.code(200).send(collegeList);
 }
 
@@ -180,3 +179,27 @@ export async function getCollegeAdmins(
 
   return reply.code(200).send(admins);
 }
+
+async function createATestSuperAdmin() {
+  const email = "test@gmail.com";
+  const password = "test1234";
+  const fullName = "Test Super Admin";
+  const passwordHash = await bcrypt.hash(password, 10);
+  await db
+    .insert(superAdmins)
+    .values({
+      fullName,
+      email,
+      passwordHash,
+    })
+    .onConflictDoNothing()
+    .returning({
+      id: superAdmins.id,
+      fullName: superAdmins.fullName,
+      email: superAdmins.email,
+    });
+}
+
+// createATestSuperAdmin()
+//   .then(() => console.log("Test Super Admin created successfully"))
+//   .catch((error) => console.error("Error creating Test Super Admin:", error));

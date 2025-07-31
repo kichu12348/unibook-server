@@ -14,7 +14,7 @@ import {
   verifyCollegeAdmin,
   verifySuperAdmin,
   verifyForumHead,
-  verifyTeacher
+  verifyTeacher,
 } from "./middlewares/checkRole";
 import { verifyToken } from "./middlewares/authMiddleware";
 import { checkHasPaid } from "./middlewares/checkHasPaid";
@@ -27,7 +27,7 @@ app.register(fastifyJwt, {
   secret: process.env.JWT_SECRET || "default_secret",
 });
 
-app.get("/health", async (_, res) => {
+app.get("/", async (_, res) => {
   try {
     await db.execute("SELECT 1");
     return {
@@ -42,29 +42,21 @@ app.get("/health", async (_, res) => {
 });
 
 app.register(userRoutes, { prefix: "/api/v1/auth" });
-app.register(superAdminRoutes, {
-  prefix: "/api/v1/sa",
-  onRequest: verifyToken,
-  preHandler: verifySuperAdmin,
-});
-app.register(collegeAdminRoutes, {
-  prefix: "/api/v1/admin",
-  onRequest: verifyToken,
-  preHandler: verifyCollegeAdmin,
-});
+app.register(superAdminRoutes, { prefix: "/api/v1/sa" });
+app.register(collegeAdminRoutes, { prefix: "/api/v1/admin" });
+
 app.register(forumRoutes, {
   prefix: "/api/v1/forums",
-  onRequest: verifyToken,
+  onRequest: [verifyToken],
   preHandler: [checkHasPaid, verifyForumHead],
 });
 app.register(teacherRoutes, {
   prefix: "/api/v1/teachers",
-  onRequest: verifyToken,
+  onRequest: [verifyToken],
   preHandler: [verifyTeacher, checkHasPaid],
 });
 app.register(publicRoutes, {
   prefix: "/api/v1/public",
-  onRequest: verifyToken,
 });
 
 // Start the server
@@ -72,7 +64,6 @@ const start = async () => {
   try {
     const port = process.env.PORT ? parseInt(process.env.PORT) : 3000;
     const host = process.env.HOST || "localhost";
-
     await app.listen({ port, host });
     console.log(`Server is running on http://${host}:${port}`);
   } catch (err) {

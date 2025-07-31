@@ -7,6 +7,8 @@ import {
   createCollegeAdmin,
   getCollegeAdmins
 } from "../controllers/superAdminController";
+import { verifyToken } from "../middlewares/authMiddleware";
+import { verifySuperAdmin } from "../middlewares/checkRole";
 
 const createCollegeSchema = {
   body: {
@@ -59,6 +61,10 @@ const createCollegeAdminSchema = {
 export default async function superAdminRoutes(
   app: FastifyInstance
 ): Promise<void> {
+
+  app.addHook("onRequest", verifyToken);
+  app.addHook("preHandler", verifySuperAdmin);
+
   app.post("/colleges", { schema: createCollegeSchema }, createCollege);
   app.get("/colleges", getColleges);
   app.get("/colleges/:id", getCollegeById);

@@ -5,7 +5,6 @@ export async function verifySuperAdmin(
   reply: FastifyReply
 ) {
   const user = request.user;
-
   if (!user || user.role !== "super_admin") {
     return reply.code(403).send({ error: "Forbidden: You aint allowed here boi" });
   }
@@ -17,7 +16,6 @@ export async function verifyCollegeAdmin(
   reply: FastifyReply
 ) {
   const user = request.user;
-
   if (!user || user.role !== "college_admin") {
     return reply.code(403).send({ error: "Forbidden: You aint allowed here boi onli college admins" });
   }

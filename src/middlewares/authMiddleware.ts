@@ -7,6 +7,7 @@ export async function verifyToken(
   try {
     await request.jwtVerify();
   } catch (err) {
+    console.error("JWT verification failed:", err);
     return reply.status(401).send({ error: "Unauthorized access bad boi 🤨" });
   }
 }
