@@ -2,7 +2,7 @@ import { FastifyRequest, FastifyReply } from "fastify";
 import bcrypt from "bcrypt";
 import crypto from "crypto";
 import { db } from "../db";
-import { users, colleges, superAdmins } from "../db/schema";
+import { users, colleges, superAdmins, forum_heads } from "../db/schema";
 import { eq, and, gt } from "drizzle-orm";
 import {
   LoginUserBody,
@@ -15,7 +15,7 @@ export async function registerUser(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
-  const { fullName, email, password, role, collegeId,forumId } =
+  const { fullName, email, password, role, collegeId, forumId } =
     request.body as RegisterUserBody;
 
   if (!["student", "teacher"].includes(role)) {
@@ -63,9 +63,17 @@ export async function registerUser(
       collegeId: college.id,
       approvalStatus,
       isEmailVerified: false,
-      forumId: forumId || null,
     })
     .returning({ id: users.id, email: users.email });
+
+  if (forumId) {
+    await db.insert(forum_heads).values({
+      userId: newUser.id,
+      forumId,
+      isVerified: false, // Initially not verified
+    });
+  }
+
   const otp = Math.floor(1000 + Math.random() * 9000).toString();
   const expires = new Date(Date.now() + 10 * 60 * 1000);
   const hashedOtp = await bcrypt.hash(otp, 10);
@@ -124,9 +132,9 @@ export async function verifyOtpAndLogin(
     .returning();
   if (updatedUser.approvalStatus === "approved") {
     const jwtToken = request.server.jwt.sign({
-        id: updatedUser.id,
-        role: updatedUser.role,
-        collegeId: updatedUser.collegeId,
+      id: updatedUser.id,
+      role: updatedUser.role,
+      collegeId: updatedUser.collegeId,
     });
     return {
       message: "Email verified successfully.",
@@ -160,8 +168,8 @@ export async function login(request: FastifyRequest, reply: FastifyReply) {
     );
     if (match) {
       const token = request.server.jwt.sign({
-          id: potentialSuperAdmin.id,
-          role: "super_admin",
+        id: potentialSuperAdmin.id,
+        role: "super_admin",
       });
       return { token };
     }
@@ -192,9 +200,9 @@ export async function login(request: FastifyRequest, reply: FastifyReply) {
   const match = await bcrypt.compare(password, user.passwordHash);
   if (match) {
     const token = request.server.jwt.sign({
-        id: user.id,
-        role: user.role,
-        collegeId: user.collegeId,
+      id: user.id,
+      role: user.role,
+      collegeId: user.collegeId,
     });
     return { token };
   }
