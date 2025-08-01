@@ -8,6 +8,7 @@ import {
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
+import { relations } from 'drizzle-orm';
 
 // ## Enums
 
@@ -160,3 +161,82 @@ export const superAdmins = pgTable("super_admins", {
   passwordHash: text("password_hash").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+
+// A College can have many Users, Forums, Venues, and Events
+export const collegeRelations = relations(colleges, ({ many }) => ({
+  users: many(users),
+  forums: many(forums),
+  venues: many(venues),
+  events: many(events),
+}));
+
+// A User belongs to one College and can be an organizer, staff member, or forum head
+export const userRelations = relations(users, ({ one, many }) => ({
+  college: one(colleges, {
+    fields: [users.collegeId],
+    references: [colleges.id],
+  }),
+  organizedEvents: many(events),
+  staffAssignments: many(eventStaffAssignments),
+  forum_heads: many(forum_heads),
+}));
+
+// A Forum belongs to one College and has many Forum Heads
+export const forumRelations = relations(forums, ({ one, many }) => ({
+  college: one(colleges, {
+    fields: [forums.collegeId],
+    references: [colleges.id],
+  }),
+  forum_heads: many(forum_heads),
+}));
+
+// A Venue belongs to one College and can host many Events
+export const venueRelations = relations(venues, ({ one, many }) => ({
+  college: one(colleges, {
+    fields: [venues.collegeId],
+    references: [colleges.id],
+  }),
+  events: many(events),
+}));
+
+// An Event has one College, one Organizer (a User), one Venue, and many Staff members
+export const eventRelations = relations(events, ({ one, many }) => ({
+  college: one(colleges, {
+    fields: [events.collegeId],
+    references: [colleges.id],
+  }),
+  organizer: one(users, {
+    fields: [events.organizerId],
+    references: [users.id],
+  }),
+  venue: one(venues, {
+    fields: [events.venueId],
+    references: [venues.id],
+  }),
+  staffAssignments: many(eventStaffAssignments),
+}));
+
+// The join table for Event Staff Assignments
+export const eventStaffAssignmentsRelations = relations(eventStaffAssignments, ({ one }) => ({
+  event: one(events, {
+    fields: [eventStaffAssignments.eventId],
+    references: [events.id],
+  }),
+  user: one(users, {
+    fields: [eventStaffAssignments.userId],
+    references: [users.id],
+  }),
+}));
+
+// The join table for Forum Heads
+export const forumHeadsRelations = relations(forum_heads, ({ one }) => ({
+  user: one(users, {
+    fields: [forum_heads.userId],
+    references: [users.id],
+  }),
+  forum: one(forums, {
+    fields: [forum_heads.forumId],
+    references: [forums.id],
+  }),
+}));

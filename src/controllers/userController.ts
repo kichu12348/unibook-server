@@ -18,7 +18,7 @@ export async function registerUser(
   const { fullName, email, password, role, collegeId, forumId } =
     request.body as RegisterUserBody;
 
-  if (!["student", "teacher"].includes(role)) {
+  if (!["student", "teacher", "forum_head"].includes(role)) {
     return reply.code(400).send({ error: "Invalid role for registration." });
   }
   if (!collegeId || !fullName || !email || !password) {
@@ -75,6 +75,7 @@ export async function registerUser(
   }
 
   const otp = Math.floor(1000 + Math.random() * 9000).toString();
+  console.log(`Generated OTP for ${email}: ${otp}`);
   const expires = new Date(Date.now() + 10 * 60 * 1000);
   const hashedOtp = await bcrypt.hash(otp, 10);
   await db

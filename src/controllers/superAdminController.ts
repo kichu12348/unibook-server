@@ -181,9 +181,9 @@ export async function getCollegeAdmins(
 }
 
 async function createATestSuperAdmin() {
-  const email = "test@gmail.com";
-  const password = "test1234";
-  const fullName = "Test Super Admin";
+  const email = "kichu@gm.com";
+  const password = "kichu12348";
+  const fullName = "Test";
   const passwordHash = await bcrypt.hash(password, 10);
   await db
     .insert(superAdmins)
@@ -200,6 +200,6 @@ async function createATestSuperAdmin() {
     });
 }
 
-// createATestSuperAdmin()
-//   .then(() => console.log("Test Super Admin created successfully"))
-//   .catch((error) => console.error("Error creating Test Super Admin:", error));
+createATestSuperAdmin()
+  .then(() => console.log("Test Super Admin created successfully"))
+  .catch((error) => console.error("Error creating Test Super Admin:", error));

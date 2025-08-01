@@ -1,7 +1,7 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { db } from "../db";
 import { users, venues, forums, forum_heads } from "../db/schema";
-import { and, ne, eq, inArray,ilike, is, } from "drizzle-orm";
+import { and, ne, eq, inArray, ilike } from "drizzle-orm";
 
 /**
  * Handles the GET /admin/users route.
@@ -40,7 +40,6 @@ export async function getUsersForCollegeAdmin(
     },
     orderBy: (users, { desc }) => [desc(users.createdAt)],
   });
-
 
   return collegeUsers;
 }
@@ -96,7 +95,10 @@ export async function approveUser(
     .returning();
 
   if (updatedUser.role === "forum_head") {
-    await db.update(forum_heads).set({ isVerified: true }).where(eq(forum_heads.userId, updatedUser.id));
+    await db
+      .update(forum_heads)
+      .set({ isVerified: true })
+      .where(eq(forum_heads.userId, updatedUser.id));
   }
   return updatedUser;
 }
@@ -316,14 +318,15 @@ export async function createForum(
 }
 
 /*
-  *handles the PUT /forums/:forumId/update route.
-  *Updates the details of an existing forum.
-  *This route is accessible only by a 'college_admin'.
+ *handles the PUT /forums/:forumId/update route.
+ *Updates the details of an existing forum.
+ *This route is accessible only by a 'college_admin'.
  */
 
 export async function updateForum(
   request: FastifyRequest,
-  reply: FastifyReply){
+  reply: FastifyReply
+) {
   const { role: adminRole, collegeId: adminCollegeId } = request.user;
   if (adminRole !== "college_admin") {
     return reply.code(403).send({
@@ -332,7 +335,10 @@ export async function updateForum(
   }
 
   const { forumId } = request.params as { forumId: string };
-  const { name, description } = request.body as {name?: string; description?: string};
+  const { name, description } = request.body as {
+    name?: string;
+    description?: string;
+  };
 
   if (!forumId) {
     return reply.code(400).send({ error: "Forum ID is required." });
@@ -367,16 +373,13 @@ export async function getForums(request: FastifyRequest, reply: FastifyReply) {
 
   const collegeForums = await db.query.forums.findMany({
     where: eq(forums.collegeId, collegeId),
-    columns:{
+    columns: {
       id: true,
       name: true,
       description: true,
     },
     orderBy: (forums, { asc }) => [asc(forums.name)],
   });
-
-  console.log("Fetched forums:", collegeForums);
-
   // Format the response to be more ooser-friendly
   const formattedForums = collegeForums.map((forum) => ({
     id: forum.id,
@@ -386,7 +389,6 @@ export async function getForums(request: FastifyRequest, reply: FastifyReply) {
 
   return formattedForums;
 }
-
 
 export async function getForumById(
   request: FastifyRequest,
@@ -410,6 +412,7 @@ export async function getForumById(
             columns: {
               id: true,
               fullName: true,
+              email: true,
             },
           },
         },
@@ -436,7 +439,6 @@ export async function searchUsersForCollegeAdmin(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
-
   // 1. Get the search query from the request URL (e.g., /users?search=John)
   const { search } = request.query as { search?: string };
 
@@ -460,7 +462,7 @@ export async function searchUsersForCollegeAdmin(
   if (search) {
     conditions.push(ilike(users.fullName, `%${search}%`));
   }
-  
+
   // Fetch users using the combined conditions
   const collegeUsers = await db.query.users.findMany({
     where: and(...conditions), // Use the spread operator to apply all conditions
@@ -477,4 +479,150 @@ export async function searchUsersForCollegeAdmin(
   });
 
   return collegeUsers;
+}
+
+/**
+ * Handles the GET /admin/venues route.
+ * Fetches a list of all venues for the currently logged-in admin's college.
+ * Accepts an optional 'search' query parameter to filter by name.
+ */
+export async function getVenues(request: FastifyRequest, reply: FastifyReply) {
+  const { collegeId } = request.user;
+  const { search } = request.query as { search?: string }; 
+
+  if (!collegeId) {
+    return reply.code(403).send({
+      error: "Forbidden: No college associated with this admin account.",
+    });
+  }
+
+  const conditions = [eq(venues.collegeId, collegeId)];
+  if (search) {
+    conditions.push(ilike(venues.name, `%${search}%`));
+  }
+
+  const collegeVenues = await db.query.venues.findMany({
+    where: and(...conditions),
+    orderBy: (venues, { asc }) => [asc(venues.name)],
+  });
+
+  return collegeVenues;
+}
+
+/**
+ * Handles the GET /admin/venues/:venueId route.
+ * Fetches details for a single venue.
+ */
+export async function getVenueById(request: FastifyRequest, reply: FastifyReply) {
+  const { collegeId } = request.user;
+  const { venueId } = request.params as { venueId: string };
+
+  if (!collegeId) {
+    return reply.code(403).send({
+      error: "Forbidden: No college associated with this admin account.",
+    });
+  }
+
+  const venue = await db.query.venues.findFirst({
+    where: and(eq(venues.id, venueId), eq(venues.collegeId, collegeId)),
+  });
+
+  if (!venue) {
+    return reply.code(404).send({ error: 'Venue not found.' });
+  }
+
+  return venue;
+}
+
+/**
+ * Handles the PUT /admin/venues/:venueId/update route.
+ * Updates an existing venue.
+ */
+export async function updateVenue(request: FastifyRequest, reply: FastifyReply) {
+  const { collegeId } = request.user;
+  const { venueId } = request.params as { venueId: string };
+  const { name, capacity, locationDetails } = request.body as { name?: string; capacity?: number; locationDetails?: string };
+
+  if (!collegeId) {
+    return reply.code(403).send({
+      error: "Forbidden: No college associated with this admin account.",
+    });
+  }
+
+  // First, verify the venue belongs to the admin's college
+  const existingVenue = await db.query.venues.findFirst({
+    where: and(eq(venues.id, venueId), eq(venues.collegeId, collegeId)),
+  });
+
+  if (!existingVenue) {
+    return reply.code(404).send({ error: "Venue not found or you don't have permission to edit it." });
+  }
+
+  const [updatedVenue] = await db
+    .update(venues)
+    .set({
+      name,
+      capacity,
+      locationDetails,
+    })
+    .where(eq(venues.id, venueId))
+    .returning();
+
+  return reply.code(200).send(updatedVenue);
+}
+
+/**
+ * Handles the DELETE /admin/forums/:forumId route.
+ * Permanently deletes a forum from the college.
+ */
+export async function deleteForum(request: FastifyRequest, reply: FastifyReply) {
+  const { collegeId: adminCollegeId } = request.user;
+  const { forumId } = request.params as { forumId: string };
+
+  if (!adminCollegeId) {
+    return reply.code(403).send({
+      error: "Forbidden: No college associated with this admin account.",
+    });
+  }
+  // Verify the forum exists and belongs to the admin's college before deleting
+  const forumToDelete = await db.query.forums.findFirst({
+    where: and(eq(forums.id, forumId), eq(forums.collegeId, adminCollegeId)),
+    columns: { id: true },
+  });
+
+  if (!forumToDelete) {
+    return reply.code(404).send({ error: "Forum not found or you don't have permission to delete it." });
+  }
+
+  await db.delete(forums).where(eq(forums.id, forumId));
+
+  return { message: "Forum deleted successfully." };
+}
+
+/**
+ * Handles the DELETE /admin/venues/:venueId route.
+ * Permanently deletes a venue from the college.
+ */
+export async function deleteVenue(request: FastifyRequest, reply: FastifyReply) {
+  const { collegeId: adminCollegeId } = request.user;
+  const { venueId } = request.params as { venueId: string };
+
+  if (!adminCollegeId) {
+    return reply.code(403).send({
+      error: "Forbidden: No college associated with this admin account.",
+    });
+  }
+
+  const venueToDelete = await db.query.venues.findFirst({
+    where: and(eq(venues.id, venueId), eq(venues.collegeId, adminCollegeId)),
+    columns: { id: true },
+  });
+
+  if (!venueToDelete) {
+    return reply.code(404).send({ error: "Venue not found or you don't have permission to delete it." });
+  }
+
+  await db.delete(venues).where(eq(venues.id, venueId));
+
+  return { message: "Venue deleted successfully." };
 }

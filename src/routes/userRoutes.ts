@@ -23,32 +23,6 @@ const userSchema = {
       },
     },
   },
-  response: {
-    201: {
-      type: "object",
-      properties: {
-        message: { type: "string" },
-      },
-    },
-    400: {
-      type: "object",
-      properties: {
-        error: { type: "string" },
-      },
-    },
-    409: {
-      type: "object",
-      properties: {
-        error: { type: "string" },
-      },
-    },
-    500: {
-      type: "object",
-      properties: {
-        error: { type: "string" },
-      },
-    },
-  },
 };
 
 const verifyEmailSchema = {

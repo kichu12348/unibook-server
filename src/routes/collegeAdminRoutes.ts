@@ -10,6 +10,11 @@ import {
   updateForum,
   searchUsersForCollegeAdmin,
   getForumById,
+  getVenues,
+  getVenueById,
+  updateVenue,
+  deleteForum,
+  deleteVenue,
 } from "../controllers/collegeAdminController";
 
 import { checkHasPaid } from "../middlewares/checkHasPaid";
@@ -120,4 +125,9 @@ export default async function collegeAdminRoutes(app: FastifyInstance) {
   app.get("/forums", getForums);
   app.get("/forums/:forumId", getForumById);
   app.get("/users/search", searchUsersForCollegeAdmin);
+  app.get("/venues", getVenues);
+  app.get("/venues/:venueId", getVenueById);
+  app.put("/venues/:venueId/update",{ preHandler: [checkHasPaid] }, updateVenue);
+  app.delete("/forums/:forumId", { preHandler: [checkHasPaid] }, deleteForum);
+  app.delete("/venues/:venueId", { preHandler: [checkHasPaid] }, deleteVenue);
 }
