@@ -41,6 +41,18 @@ export const colleges = pgTable("colleges", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// college forums table
+export const forums = pgTable("forums", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  collegeId: uuid("college_id")
+    .notNull()
+    .references(() => colleges.id, { onDelete: "cascade" }),
+});
+
+// Schema for the college user
 export const users = pgTable(
   "users",
   {
@@ -66,9 +78,6 @@ export const users = pgTable(
     collegeId: uuid("college_id")
       .notNull()
       .references(() => colleges.id, { onDelete: "cascade" }),
-    forumId: uuid("forum_id").references(() => forums.id, {
-      onDelete: "set null",
-    }),
   },
   (table) => [
     { uniqueEmailInCollege: unique().on(table.collegeId, table.email) },
@@ -131,16 +140,6 @@ export const eventStaffAssignments = pgTable(
   ]
 );
 
-// college forums table
-export const forums = pgTable("forums", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  name: text("name").notNull(),
-  description: text("description"),
-  createdAt: timestamp("created_at").defaultNow().notNull(),
-  collegeId: uuid("college_id")
-    .notNull()
-    .references(() => colleges.id, { onDelete: "cascade" }),
-});
 
 // forum heads table
 export const forum_heads = pgTable("forum_heads", {
@@ -150,6 +149,7 @@ export const forum_heads = pgTable("forum_heads", {
   forumId: uuid("forum_id")
     .notNull()
     .references(() => forums.id, { onDelete: "cascade" }),
+    isVerified: boolean("is_verified").default(false).notNull(),
 });
 
 //shuper admins table

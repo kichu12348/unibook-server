@@ -1,7 +1,7 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { db } from "../db";
 import { users, venues, forums, forum_heads } from "../db/schema";
-import { and, ne, eq, inArray,ilike, } from "drizzle-orm";
+import { and, ne, eq, inArray,ilike, is, } from "drizzle-orm";
 
 /**
  * Handles the GET /admin/users route.
@@ -95,13 +95,8 @@ export async function approveUser(
     .where(eq(users.id, targetUserId))
     .returning();
 
-  const forumId = updatedUser.forumId;
-
-  if (forumId && updatedUser.role === "forum_head") {
-    await db.insert(forum_heads).values({
-      userId: targetUserId,
-      forumId,
-    });
+  if (updatedUser.role === "forum_head") {
+    await db.update(forum_heads).set({ isVerified: true }).where(eq(forum_heads.userId, updatedUser.id));
   }
   return updatedUser;
 }
@@ -303,12 +298,13 @@ export async function createForum(
       }
       await tx
         .update(users)
-        .set({ role: "forum_head", forumId: createdForum.id })
+        .set({ role: "forum_head" })
         .where(inArray(users.id, headIds));
 
       const headsToInsert = headIds.map((userId) => ({
-        forumId: createdForum.id,
         userId: userId,
+        forumId: createdForum.id,
+        isVerified: true, // Assuming heads are verified upon creation
       }));
 
       await tx.insert(forum_heads).values(headsToInsert);

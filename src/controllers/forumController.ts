@@ -375,7 +375,8 @@ export async function getPendingForumHeads(
     where: and(
       eq(users.collegeId, collegeId),
       inArray(users.id, allHeadUserIds),
-      eq(users.approvalStatus, "pending")
+      eq(users.approvalStatus, "pending"),
+      eq(forum_heads.isVerified, false)
     ),
     columns: {
       id: true,
@@ -474,6 +475,7 @@ export async function approveForumHead(
   await db.insert(forum_heads).values({
     userId: targetUserId,
     forumId: approverForumAssignments[0].forumId,
+    isVerified: true, // Assuming heads are verified upon approval
   });
 
   return updatedUser;
@@ -560,6 +562,9 @@ export async function rejectForumHead(
     .set({ approvalStatus: "rejected" })
     .where(eq(users.id, targetUserId))
     .returning();
+
+  // 7. Optionally, remove the rejected user from the forum_heads table
+  await db.delete(forum_heads).where(eq(forum_heads.userId, targetUserId));
 
   return updatedUser;
 }
