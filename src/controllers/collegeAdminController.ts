@@ -367,17 +367,10 @@ export async function getForums(request: FastifyRequest, reply: FastifyReply) {
 
   const collegeForums = await db.query.forums.findMany({
     where: eq(forums.collegeId, collegeId),
-    with: {
-      forum_heads: {
-        with: {
-          user: {
-            columns: {
-              id: true,
-              fullName: true,
-            },
-          },
-        },
-      },
+    columns:{
+      id: true,
+      name: true,
+      description: true,
     },
     orderBy: (forums, { asc }) => [asc(forums.name)],
   });
@@ -389,10 +382,6 @@ export async function getForums(request: FastifyRequest, reply: FastifyReply) {
     id: forum.id,
     name: forum.name,
     description: forum.description,
-    createdAt: forum.createdAt,
-    heads: (forum.forum_heads as { user: { id: string; fullName: string } }[])
-      .map((fh) => fh.user)
-      .filter(Boolean),
   }));
 
   return formattedForums;
