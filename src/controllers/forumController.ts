@@ -5,8 +5,9 @@ import {
   forum_heads,
   users,
   eventStaffAssignments,
+  venues,
 } from "../db/schema";
-import { and, eq, gte, lte, or, not, inArray } from "drizzle-orm";
+import { and, eq, gte, lte, or, not, inArray, ilike, ne } from "drizzle-orm";
 
 /**
  * Handles the POST /events route.
@@ -19,7 +20,17 @@ export async function createEvent(
 ) {
   const { id: organizerId, collegeId } = request.user;
 
-  const { name, description, startTime, endTime, venueId, registrationLink, bannerImage } = request.body as {
+  const {
+    name,
+    description,
+    startTime,
+    endTime,
+    venueId,
+    registrationLink,
+    bannerImage,
+    resizeMode,
+    forumId,
+  } = request.body as {
     name: string;
     description?: string;
     startTime: string;
@@ -27,6 +38,8 @@ export async function createEvent(
     venueId?: string;
     registrationLink?: string;
     bannerImage?: string;
+    resizeMode?: string;
+    forumId: string;
   };
 
   if (!name || !startTime || !endTime) {
@@ -79,11 +92,23 @@ export async function createEvent(
           organizerId,
           collegeId,
           registrationLink,
+          resizeMode,
           bannerImage,
+          forumId,
           status: "confirmed",
         })
         .returning();
+      if (venueId) {
+        const venue = await tx.query.venues.findFirst({
+          where: eq(venues.id, venueId),
+          columns: {
+            name: true,
+            locationDetails: true,
+          },
+        });
 
+        return { ...createdEvent, venue };
+      }
       return createdEvent;
     });
 
@@ -162,6 +187,7 @@ export async function getEventById(
     with: {
       venue: {
         columns: {
+          id: true,
           name: true,
           locationDetails: true,
           capacity: true,
@@ -171,6 +197,12 @@ export async function getEventById(
         columns: {
           id: true,
           fullName: true,
+        },
+      },
+      forum: {
+        columns: {
+          id: true,
+          name: true,
         },
       },
       staffAssignments: {
@@ -192,14 +224,10 @@ export async function getEventById(
 
   const formattedEvent = {
     ...eventDetails,
-    staff: (
-      eventDetails.staffAssignments as Array<{
-        user: { id: string; fullName: string };
-        assignmentRole: string;
-      }>
-    ).map((assignment) => ({
+    staff: eventDetails.staffAssignments.map((assignment) => ({
       ...assignment.user,
-      assignmentRole: assignment.assignmentRole,
+      status: assignment.status,
+      assignmentRole: assignment.assignmentRole || "",
     })),
   };
   delete (formattedEvent as any).staffAssignments;
@@ -226,6 +254,7 @@ export async function updateEvent(
     venueId: string | null;
     registrationLink: string | null;
     bannerImage: string | null;
+    resizeMode: string | null;
   }>;
 
   if (!collegeId) {
@@ -312,6 +341,7 @@ export async function updateEvent(
           venueId: updateData.venueId,
           registrationLink: updateData.registrationLink,
           bannerImage: updateData.bannerImage,
+          resizeMode: updateData.resizeMode || "cover",
         })
         .where(eq(events.id, eventId))
         .returning();
@@ -615,19 +645,33 @@ export async function requestStaffForEvent(
         throw new Error("You can only request teachers to be event staff.");
       }
 
-      // Step C: Find all of the teacher's *approved* assignments
+      // --- START OF FIX ---
+      // Step C: Check if this teacher has already been requested for THIS event
+      const existingAssignment = await tx.query.eventStaffAssignments.findFirst({
+        where: and(
+          eq(eventStaffAssignments.eventId, eventId),
+          eq(eventStaffAssignments.userId, teacherUserId)
+        )
+      });
+
+      if (existingAssignment) {
+        throw new Error("This teacher has already been requested for this event.");
+      }
+      // --- END OF FIX ---
+
+
+      // Step D: Find all of the teacher's *approved* assignments to check for time conflicts
       const teacherApprovedAssignments =
         await tx.query.eventStaffAssignments.findMany({
           where: and(
             eq(eventStaffAssignments.userId, teacherUserId),
-            eq(eventStaffAssignments.status, "approved") // Only consider approved assignments
+            eq(eventStaffAssignments.status, "approved")
           ),
-          with: { event: true }, // Include the full event details for each assignment
+          with: { event: true },
         });
 
-      // Step D: Check if the new event's time conflicts with any existing commitments
+      // Step E: Check if the new event's time conflicts with any existing commitments
       for (const assignment of teacherApprovedAssignments) {
-        // FIX: Add a type assertion to inform TypeScript of the event's shape
         const existingEvent = assignment.event as {
           name: string;
           startTime: Date;
@@ -636,7 +680,6 @@ export async function requestStaffForEvent(
         const newEventStart = event.startTime;
         const newEventEnd = event.endTime;
 
-        // Check for time overlap
         const isOverlapping =
           newEventStart < existingEvent.endTime &&
           newEventEnd > existingEvent.startTime;
@@ -648,7 +691,8 @@ export async function requestStaffForEvent(
         }
       }
 
-      // Step E: Create the 'pending' assignment in the join table
+      // Step F: Create the 'pending' assignment in the join table
+      // REMOVED .onConflictDoNothing()
       await tx
         .insert(eventStaffAssignments)
         .values({
@@ -656,14 +700,13 @@ export async function requestStaffForEvent(
           userId: teacherUserId,
           assignmentRole: assignmentRole || "Staff in Charge",
           status: "pending",
-        })
-        .onConflictDoNothing();
+        });
     });
 
     return { message: "Request has been sent to the teacher successfully." };
   } catch (error: any) {
     // Catch specific, known errors to provide clear feedback
-    if (error.message.includes("already assigned")) {
+    if (error.message.includes("already assigned") || error.message.includes("already been requested")) {
       return reply.code(409).send({ error: error.message }); // 409 Conflict
     }
     if (
@@ -774,3 +817,75 @@ export async function removeStaffFromEvent(
 
   return { message: "Staff member successfully removed from the event." };
 }
+
+/**
+ * Handles the GET /venues route for Forum Heads.
+ * Fetches a list of all venues for the user's college.
+ */
+export async function getVenuesForForumHead(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { collegeId } = request.user;
+  const { search } = request.query as { search?: string };
+
+  if (!collegeId) {
+    return reply.code(403).send({
+      error: "Forbidden: No college associated with this account.",
+    });
+  }
+
+  const conditions = [eq(venues.collegeId, collegeId)];
+  if (search) {
+    conditions.push(ilike(venues.name, `%${search}%`));
+  }
+
+  const collegeVenues = await db.query.venues.findMany({
+    where: and(...conditions),
+    orderBy: (venues, { asc }) => [asc(venues.name)],
+  });
+
+  return collegeVenues;
+}
+
+/**
+ * [NEW] Handles the GET /users/teachers route for Forum Heads.
+ * Fetches a list of all approved teachers in the user's college, with optional search.
+ */
+export async function getTeachersForForumHead(request: FastifyRequest, reply: FastifyReply) {
+  const { collegeId } = request.user;
+  const { search } = request.query as { search?: string };
+
+  if (!collegeId) {
+    return reply.code(403).send({
+      error: "Forbidden: No college associated with this account.",
+    });
+  }
+
+  // Define conditions for the query
+  const conditions = [
+    eq(users.collegeId, collegeId),
+    eq(users.role, "teacher"),
+    eq(users.approvalStatus, "approved"),
+    ne(users.id, request.user.id), // Exclude the current user
+  ];
+
+  // Add search term to conditions if it exists
+  if (search) {
+    conditions.push(ilike(users.fullName, `%${search}%`));
+  }
+
+  // Execute the query
+  const teachers = await db.query.users.findMany({
+    where: and(...conditions),
+    columns: {
+      id: true,
+      fullName: true,
+      email: true,
+    },
+    orderBy: (users, { asc }) => [asc(users.fullName)],
+  });
+
+  return teachers;
+}
+

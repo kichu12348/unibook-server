@@ -107,6 +107,7 @@ export const events = pgTable("events", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
   bannerImage: text("banner_image"),
+  resizeMode: text("resize_mode"),
   registrationLink: text("registration_link"),
   collegeId: uuid("college_id")
     .notNull()
@@ -117,6 +118,9 @@ export const events = pgTable("events", {
   organizerId: uuid("organizer_id")
     .notNull()
     .references(() => users.id),
+    forumId: uuid("forum_id")
+      .notNull()
+      .references(() => forums.id, { onDelete: "cascade" }),
 });
 
 export const eventStaffAssignments = pgTable(
@@ -209,6 +213,10 @@ export const eventRelations = relations(events, ({ one, many }) => ({
   organizer: one(users, {
     fields: [events.organizerId],
     references: [users.id],
+  }),
+  forum: one(forums, {
+    fields: [events.forumId],
+    references: [forums.id],
   }),
   venue: one(venues, {
     fields: [events.venueId],

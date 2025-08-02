@@ -191,6 +191,13 @@ export async function login(request: FastifyRequest, reply: FastifyReply) {
       code: "NOT_VERIFIED",
     });
   }
+
+  if(user.approvalStatus === "rejected") {
+    return reply.code(403).send({
+      error: "Your account has been rejected by the college admin.",
+      code: "ACCOUNT_REJECTED",
+    });
+  }
   if (user.approvalStatus !== "approved") {
     return reply.code(403).send({
       error: "Your account is pending approval from the college admin.",
@@ -242,6 +249,27 @@ export async function getMe(request: FastifyRequest, reply: FastifyReply) {
       isEmailVerified: true,
       createdAt: true,
     },
+    with:{
+      college: {
+        columns: {
+          id: true,
+          name: true,
+        },
+      },
+      forum_heads: {
+        columns:{
+          forumId: true,
+          isVerified: true,
+        },
+        with: {
+          forum: {
+            columns: {
+              name: true,
+            },
+          },
+        },
+      },
+    }
   });
 
   if (!userProfile) {

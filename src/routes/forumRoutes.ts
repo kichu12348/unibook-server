@@ -10,7 +10,12 @@ import {
   removeStaffFromEvent,
   requestStaffForEvent,
   updateEvent,
+  getVenuesForForumHead,
+  getTeachersForForumHead
 } from "../controllers/forumController";
+import { verifyToken } from "../middlewares/authMiddleware";
+import { verifyForumHead } from "../middlewares/checkRole";
+import { checkHasPaid } from "../middlewares/checkHasPaid";
 
 const createForumSchema = {
   body: {
@@ -24,6 +29,7 @@ const createForumSchema = {
       venueId: { type: "string", nullable: true },
       registrationLink: { type: "string", nullable: true },
       bannerImage: { type: "string", nullable: true },
+      resizeMode: { type: "string", default: "cover", nullable: true },
     },
   },
 };
@@ -45,6 +51,7 @@ const updateForumSchema = {
       venueId: { type: "string", nullable: true },
       registrationLink: { type: "string", nullable: true },
       bannerImage: { type: "string", nullable: true },
+      resizeMode: { type: "string", default: "cover", nullable: true },
     },
   },
 };
@@ -98,6 +105,12 @@ const removeStaffFromEventSchema = {
 };
 
 export default async function forumRoutes(app: FastifyInstance): Promise<void> {
+
+  app.addHook("onRequest",verifyToken);
+  app.addHook("preHandler", verifyForumHead);
+  app.addHook("preHandler", checkHasPaid);
+
+
   app.post("/events", { schema: createForumSchema }, createEvent);
   app.get("/events", getEvents);
   app.get("/events/:eventId", getEventById);
@@ -124,4 +137,6 @@ export default async function forumRoutes(app: FastifyInstance): Promise<void> {
     { schema: removeStaffFromEventSchema },
     removeStaffFromEvent
   );
+  app.get("/venues", getVenuesForForumHead);
+  app.get("/users/teachers", getTeachersForForumHead);
 }
