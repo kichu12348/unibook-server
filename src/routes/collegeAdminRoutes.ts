@@ -104,7 +104,15 @@ export default async function collegeAdminRoutes(app: FastifyInstance) {
   );
   app.delete(
     "/users/:userId",
-    { schema: approveOrRejectOrDeleteSchema, preHandler: [checkHasPaid] },
+    { schema: {
+      params:{
+        type: "object",
+        properties: {
+          userId: { type: "string" },
+        },
+        required: ["userId"],
+      }
+    }, preHandler: [checkHasPaid] },
     deleteUser
   );
   app.post(

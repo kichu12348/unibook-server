@@ -38,6 +38,21 @@ export async function getUsersForCollegeAdmin(
       isEmailVerified: true,
       createdAt: true,
     },
+    with: {
+      forum_heads: {
+        columns: {
+          forumId: true,
+          isVerified: true,
+        },
+        with: {
+          forum: {
+            columns: {
+              name: true,
+            },
+          },
+        },
+      },
+    },
     orderBy: (users, { desc }) => [desc(users.createdAt)],
   });
 
@@ -53,53 +68,57 @@ export async function approveUser(
   request: FastifyRequest,
   reply: FastifyReply
 ) {
-  const { id: approverId, role: approverRole } = request.user;
+  const { id: approverId } = request.user;
   const { userId: targetUserId } = request.params as { userId: string };
-
-  // Fetch both the approver and the user to be approved from the database
+  const { forumId } = request.body as { forumId?: string }; // Get forumId from body
   const [approver, targetUser] = await Promise.all([
     db.query.users.findFirst({ where: eq(users.id, approverId) }),
     db.query.users.findFirst({ where: eq(users.id, targetUserId) }),
   ]);
 
-  // 4. Validate that both users exist
   if (!approver || !targetUser) {
     return reply.code(404).send({ error: "User not found." });
   }
 
-  // 5. CRITICAL SECURITY CHECKS
-  // Ensure the approver is themselves approved
   if (approver.approvalStatus !== "approved") {
-    return reply
-      .code(403)
-      .send({ error: "Forbidden: Your own account is not approved." });
+    return reply.code(403).send({ error: "Forbidden: Your own account is not approved." });
   }
   if (approver.collegeId !== targetUser.collegeId) {
-    return reply.code(403).send({
-      error: "Forbidden: You can only approve users within your own college.",
-    });
-  }
-  if (approverRole === "college_admin") {
-    if (targetUser.role !== "teacher" && targetUser.role !== "forum_head") {
-      return reply.code(400).send({
-        error: "College admins can only approve teachers or forum heads.",
-      });
-    }
+    return reply.code(403).send({ error: "Forbidden: You can only approve users within your own college." });
   }
 
-  //Update the target user's status to 'approved'
+  // --- Role-specific Logic ---
   const [updatedUser] = await db
     .update(users)
     .set({ approvalStatus: "approved" })
     .where(eq(users.id, targetUserId))
-    .returning();
+    .returning({
+      id: users.id,
+      fullName: users.fullName,
+      email: users.email,
+      role: users.role,
+      collegeId: users.collegeId,
+      approvalStatus: users.approvalStatus,
+      createdAt: users.createdAt,
+    });
 
   if (updatedUser.role === "forum_head") {
-    await db
-      .update(forum_heads)
-      .set({ isVerified: true })
-      .where(eq(forum_heads.userId, updatedUser.id));
+    if (!forumId) {
+      return reply.code(400).send({ error: "A forumId is required to approve a forum head." });
+    }
+
+    await db.delete(forum_heads).where(and(
+      eq(forum_heads.userId, targetUserId),
+      eq(forum_heads.isVerified, false)
+    ));
+    
+    await db.insert(forum_heads).values({
+      userId: targetUserId,
+      forumId: forumId,
+      isVerified: true,
+    }).onConflictDoNothing();
   }
+
   return updatedUser;
 }
 
@@ -112,29 +131,19 @@ export async function rejectUser(request: FastifyRequest, reply: FastifyReply) {
   const { collegeId: adminCollegeId } = request.user;
   const { userId: targetUserId } = request.params as { userId: string };
 
-  const targetUser = await db.query.users.findFirst({
-    where: eq(users.id, targetUserId),
-  });
+  const targetUser = await db.query.users.findFirst({ where: eq(users.id, targetUserId) });
 
   if (!targetUser) {
     return reply.code(404).send({ error: "User not found." });
   }
-
   if (targetUser.collegeId !== adminCollegeId) {
-    return reply.code(403).send({
-      error: "Forbidden: You can only reject users within your own college.",
-    });
+    return reply.code(403).send({ error: "Forbidden: You can only reject users within your own college." });
   }
   if (targetUser.approvalStatus === "approved") {
-    return reply
-      .code(400)
-      .send({ error: "Cannot reject a user who is already approved." });
+    return reply.code(400).send({ error: "Cannot reject a user who is already approved." });
   }
-
   if (targetUser.role !== "teacher" && targetUser.role !== "forum_head") {
-    return reply.code(400).send({
-      error: "College admins can only reject teachers or forum heads.",
-    });
+    return reply.code(400).send({ error: "College admins can only reject teachers or forum heads." });
   }
 
   const [updatedUser] = await db
@@ -142,6 +151,14 @@ export async function rejectUser(request: FastifyRequest, reply: FastifyReply) {
     .set({ approvalStatus: "rejected" })
     .where(eq(users.id, targetUserId))
     .returning();
+    
+  // If a forum head is rejected, remove their pending entry from the join table.
+  if (updatedUser.role === "forum_head") {
+      await db.delete(forum_heads).where(and(
+          eq(forum_heads.userId, targetUserId),
+          eq(forum_heads.isVerified, false)
+      ));
+  }
 
   return updatedUser;
 }

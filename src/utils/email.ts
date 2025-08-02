@@ -12,7 +12,7 @@ const transporter = nodemailer.createTransport({
 
 export async function sendOtpEmail(userEmail: string, otp: string) {
   const mailOptions = {
-    from: `"Unibook" <${process.env.SMTP_USER}>`,
+    from: `"Unibook" <${process.env.EMAIL_FROM}>`,
     to: userEmail,
     subject: "Your Unibook Verification Code",
     html: `
@@ -34,3 +34,9 @@ export async function sendOtpEmail(userEmail: string, otp: string) {
     console.error("Failed to send OTP email:", error);
   }
 }
+
+
+// const test = async () => {
+//   await sendOtpEmail("chn23cse026@ceconline.edu", "123456");
+// }
+// test().then(()=>console.log("Test email sent")).catch(err => console.error("Error sending test email:", err));
