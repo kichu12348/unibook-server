@@ -31,6 +31,12 @@ export const approvalStatusEnum = pgEnum("approval_status", [
   "rejected",
 ]);
 
+export const collaborationStatusEnum = pgEnum("collaboration_status", [
+  "pending",
+  "accepted",
+  "rejected",
+]);
+
 // ## Tables
 
 export const colleges = pgTable("colleges", {
@@ -52,6 +58,28 @@ export const forums = pgTable("forums", {
     .notNull()
     .references(() => colleges.id, { onDelete: "cascade" }),
 });
+
+
+export const eventCollaborators = pgTable(
+  "event_collaborators",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    status: collaborationStatusEnum("status").default("pending").notNull(),
+    eventId: uuid("event_id")
+      .notNull()
+      .references(() => events.id, { onDelete: "cascade" }),
+
+    collaboratingForumId: uuid("collaborating_forum_id")
+      .notNull()
+      .references(() => forums.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    {
+      uniqueEventForum: unique().on(table.eventId, table.collaboratingForumId),
+    },
+  ]
+);
 
 // Schema for the college user
 export const users = pgTable(
@@ -193,6 +221,7 @@ export const forumRelations = relations(forums, ({ one, many }) => ({
     references: [colleges.id],
   }),
   forum_heads: many(forum_heads),
+  collaborationRequests: many(eventCollaborators),
 }));
 
 // A Venue belongs to one College and can host many Events
@@ -223,6 +252,7 @@ export const eventRelations = relations(events, ({ one, many }) => ({
     references: [venues.id],
   }),
   staffAssignments: many(eventStaffAssignments),
+  collaborators: many(eventCollaborators),
 }));
 
 // The join table for Event Staff Assignments
@@ -245,6 +275,17 @@ export const forumHeadsRelations = relations(forum_heads, ({ one }) => ({
   }),
   forum: one(forums, {
     fields: [forum_heads.forumId],
+    references: [forums.id],
+  }),
+}));
+
+export const eventCollaboratorsRelations = relations(eventCollaborators, ({ one }) => ({
+  event: one(events, {
+    fields: [eventCollaborators.eventId],
+    references: [events.id],
+  }),
+  forum: one(forums, {
+    fields: [eventCollaborators.collaboratingForumId],
     references: [forums.id],
   }),
 }));
