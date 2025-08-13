@@ -89,6 +89,12 @@ export async function getPublicEventById(
           fullName: true,
         },
       },
+      forum:{
+        columns: {
+          id: true,
+          name: true,
+        },
+      },
       staffAssignments: {
         with: {
           user: {

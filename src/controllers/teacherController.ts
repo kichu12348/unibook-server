@@ -231,6 +231,7 @@ export async function getAcceptedEvents(request: FastifyRequest) {
       return {
         ...event,
         myAssignmentRole: assignment.assignmentRole,
+        assignmentId: assignment.id,
       };
     });
 
@@ -260,12 +261,10 @@ export async function cancelStaffRequest(
   });
 
   if (!assignmentToCancel) {
-    return reply
-      .code(404)
-      .send({
-        error:
-          "Accepted assignment not found or you are not authorized to cancel it.",
-      });
+    return reply.code(404).send({
+      error:
+        "Accepted assignment not found or you are not authorized to cancel it.",
+    });
   }
 
   await db
@@ -275,4 +274,37 @@ export async function cancelStaffRequest(
   return {
     message: "Your assignment to the event has been successfully cancelled.",
   };
+}
+
+/**
+ * Handles the GET /teachers/requests/:assignmentId route.
+ * Fetches details for a single event assignment for the logged-in teacher.
+ */
+export async function getAssignmentById(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { id: teacherId } = request.user;
+  const { assignmentId } = request.params as { assignmentId: string };
+
+  const assignment = await db.query.eventStaffAssignments.findFirst({
+    where: and(
+      eq(eventStaffAssignments.id, assignmentId),
+      eq(eventStaffAssignments.userId, teacherId)
+    ),
+    with: {
+      event: {
+        with: {
+          organizer: { columns: { fullName: true } },
+          venue: { columns: { name: true, locationDetails: true } },
+          forum: { columns: { name: true, id: true } },
+        },
+      },
+    },
+  });
+
+  if (!assignment) {
+    return reply.code(404).send({ error: "Assignment not found." });
+  }
+  return reply.send(assignment);
 }

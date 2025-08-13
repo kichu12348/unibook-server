@@ -33,7 +33,11 @@ const forumSchema = {
 
 export default async function publicRoutes(app: FastifyInstance) {
   app.get("/events", { onRequest: [verifyToken] }, getPublicEvents);
-  app.get("/events/:eventId", { schema: eventSchema }, getPublicEventById);
+  app.get(
+    "/events/:eventId",
+    { schema: eventSchema, onRequest: [verifyToken] },
+    getPublicEventById
+  );
   // app.get("/forums", getPublicForums);
   // app.get("/forums/:forumId", { schema: forumSchema }, getForumById);
   app.get("/colleges/me", getMyCollegeDetails);

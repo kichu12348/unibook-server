@@ -5,6 +5,7 @@ import {
   rejectStaffRequest,
   getAcceptedEvents,
   cancelStaffRequest,
+  getAssignmentById
 } from "../controllers/teacherController";
 import { verifyToken } from "../middlewares/authMiddleware";
 import { checkHasPaid } from "../middlewares/checkHasPaid";
@@ -52,4 +53,6 @@ export default async function teacherRoutes(app: FastifyInstance) {
     { schema: cancelRequestSchema },
     cancelStaffRequest
   );
+
+  app.get("/requests/:assignmentId", getAssignmentById);
 }
