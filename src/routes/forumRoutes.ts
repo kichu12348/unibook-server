@@ -11,7 +11,13 @@ import {
   requestStaffForEvent,
   updateEvent,
   getVenuesForForumHead,
-  getTeachersForForumHead
+  getTeachersForForumHead,
+  requestCollaboration,
+  getPendingCollaborations,
+  respondToCollaboration,
+  removeCollaborator,
+  getEventsByMonth,
+  getYearlyEventActivity
 } from "../controllers/forumController";
 import { verifyToken } from "../middlewares/authMiddleware";
 import { verifyForumHead } from "../middlewares/checkRole";
@@ -139,4 +145,12 @@ export default async function forumRoutes(app: FastifyInstance): Promise<void> {
   );
   app.get("/venues", getVenuesForForumHead);
   app.get("/users/teachers", getTeachersForForumHead);
+
+   app.post("/events/:eventId/collaborators", requestCollaboration);
+  app.get("/collaborations/pending", getPendingCollaborations);
+  app.put("/collaborations/:collaborationId/respond", respondToCollaboration);
+  app.delete("/events/:eventId/collaborators/:collaboratorForumId", removeCollaborator);
+
+  app.get("/events/yearly-activity", getYearlyEventActivity);
+  app.get("/events/by-month", getEventsByMonth);
 }

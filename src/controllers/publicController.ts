@@ -1,7 +1,7 @@
 import { FastifyRequest, FastifyReply } from "fastify";
 import { db } from "../db";
 import { events, forums, colleges } from "../db/schema";
-import { and, eq, gte } from "drizzle-orm";
+import { and, eq, gte, ilike, ne } from "drizzle-orm";
 
 /**
  * Handles the GET /events route.
@@ -210,17 +210,16 @@ export async function getForumById(
           },
         },
       },
-      // Include the list of events organized by this forum
-      events: {
-        orderBy: (
-          events: { startTime: Date },
-          { desc }: { desc: (field: Date) => any }
-        ) => [desc(events.startTime)],
-        with: {
-          venue: {
-            columns: { name: true },
-          },
-        },
+    },
+  });
+
+  // Separately query events related to this forum
+  const forumEvents = await db.query.events.findMany({
+    where: eq(events.forumId, forumId),
+    orderBy: (events, { desc }) => [desc(events.startTime)],
+    with: {
+      venue: {
+        columns: { name: true },
       },
     },
   });
@@ -236,15 +235,17 @@ export async function getForumById(
     description: forumDetails.description,
     createdAt: forumDetails.createdAt,
     // Map the nested structures to simple arrays
-    heads: (forumDetails.forum_heads as any[]).map((fh) => fh.user),
-    events: (forumDetails.events as any[]).map((event) => ({
+    heads:
+      "forum_heads" in forumDetails
+        ? (forumDetails.forum_heads as any[]).map((fh) => fh.user)
+        : [],
+    events: forumEvents.map((event) => ({
       id: event.id,
       name: event.name,
       startTime: event.startTime,
       venueName: event.venue?.name || null,
     })),
   };
-
   return formattedForum;
 }
 
@@ -279,7 +280,6 @@ export async function getMyCollegeDetails(
   return collegeDetails;
 }
 
-
 export async function getAllColleges(
   request: FastifyRequest,
   reply: FastifyReply
@@ -304,10 +304,42 @@ export async function getForumsOfCollegeId(
   const forumsList = await db.query.forums.findMany({
     where: eq(forums.collegeId, collegeId),
     orderBy: (forums, { asc }) => [asc(forums.name)],
-    columns:{
+    columns: {
       name: true,
       id: true,
-    }
+    },
   });
   return reply.code(200).send(forumsList);
+}
+
+export async function searchAllForums(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { search, organizingForumId } = request.query as {
+    search?: string;
+    organizingForumId?: string;
+  };
+
+  const conditions = [];
+  if (search) {
+    conditions.push(ilike(forums.name, `%${search}%`));
+  }
+  // Exclude the organizing forum from the search results
+  if (organizingForumId) {
+    conditions.push(ne(forums.id, organizingForumId));
+  }
+
+  const forumList = await db.query.forums.findMany({
+    where: and(...conditions),
+    columns: { id: true, name: true },
+    with: {
+      college: {
+        columns: { name: true },
+      },
+    },
+    limit: 20,
+  });
+
+  return reply.code(200).send(forumList);
 }

@@ -45,17 +45,9 @@ app.register(userRoutes, { prefix: "/api/v1/auth" });
 app.register(superAdminRoutes, { prefix: "/api/v1/sa" });
 app.register(collegeAdminRoutes, { prefix: "/api/v1/admin" });
 
-app.register(forumRoutes, {
-  prefix: "/api/v1/forums",
-});
-app.register(teacherRoutes, {
-  prefix: "/api/v1/teachers",
-  onRequest: [verifyToken],
-  preHandler: [verifyTeacher, checkHasPaid],
-});
-app.register(publicRoutes, {
-  prefix: "/api/v1/public",
-});
+app.register(forumRoutes, { prefix: "/api/v1/forums" });
+app.register(teacherRoutes, { prefix: "/api/v1/teachers" });
+app.register(publicRoutes, { prefix: "/api/v1/public" });
 
 // Start the server
 const start = async () => {

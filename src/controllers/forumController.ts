@@ -6,8 +6,22 @@ import {
   users,
   eventStaffAssignments,
   venues,
+  eventCollaborators,
+  forums,
 } from "../db/schema";
-import { and, eq, gte, lte, or, not, inArray, ilike, ne } from "drizzle-orm";
+import {
+  and,
+  eq,
+  gte,
+  lte,
+  or,
+  not,
+  inArray,
+  ilike,
+  ne,
+  notInArray,
+  sql,
+} from "drizzle-orm";
 
 /**
  * Handles the POST /events route.
@@ -205,6 +219,17 @@ export async function getEventById(
           name: true,
         },
       },
+      collaborators: {
+        where: eq(eventCollaborators.status, "accepted"),
+        with: {
+          forum: {
+            columns: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+      },
       staffAssignments: {
         with: {
           user: {
@@ -224,6 +249,7 @@ export async function getEventById(
 
   const formattedEvent = {
     ...eventDetails,
+    collaboratingForums: eventDetails.collaborators.map((c) => c.forum),
     staff: eventDetails.staffAssignments.map((assignment) => ({
       ...assignment.user,
       status: assignment.status,
@@ -231,6 +257,7 @@ export async function getEventById(
     })),
   };
   delete (formattedEvent as any).staffAssignments;
+  delete (formattedEvent as any).collaborators;
 
   return formattedEvent;
 }
@@ -381,32 +408,44 @@ export async function getPendingForumHeads(
 
   // 2. Find which forums the current user is a head of
   const userForumAssignments = await db.query.forum_heads.findMany({
-    where: eq(forum_heads.userId, currentUserId),
+    where: and(
+      eq(forum_heads.userId, currentUserId),
+      eq(forum_heads.isVerified, true)
+    ),
   });
 
-  // If the user is not a head of any forums, they can't see any pending requests.
   if (userForumAssignments.length === 0) {
-    return [];
+    return []; // If the user isn't an approved head of any forum, return empty.
   }
 
   const forumIds = userForumAssignments.map((assignment) => assignment.forumId);
 
-  // 3. Find all user assignments for those specific forums
-  const allHeadAssignmentsForForums = await db.query.forum_heads.findMany({
-    where: inArray(forum_heads.forumId, forumIds),
+  // 3. Step 1: Find all UNVERIFIED assignments for those specific forums, EXCLUDING the current user.
+  const unverifiedAssignments = await db.query.forum_heads.findMany({
+    where: and(
+      inArray(forum_heads.forumId, forumIds),
+      eq(forum_heads.isVerified, false),
+      ne(forum_heads.userId, currentUserId)
+    ),
+    columns: {
+      userId: true,
+    },
   });
 
-  const allHeadUserIds = allHeadAssignmentsForForums.map(
+  if (unverifiedAssignments.length === 0) {
+    return []; // No unverified heads found for these forums.
+  }
+
+  const pendingHeadUserIds = unverifiedAssignments.map(
     (assignment) => assignment.userId
   );
 
-  // 4. Fetch the user details for only those users who are pending approval
+  // 4. Step 2: Now, fetch the user details for only those users who are also PENDING approval.
   const pendingHeads = await db.query.users.findMany({
     where: and(
       eq(users.collegeId, collegeId),
-      inArray(users.id, allHeadUserIds),
-      eq(users.approvalStatus, "pending"),
-      eq(forum_heads.isVerified, false)
+      inArray(users.id, pendingHeadUserIds),
+      eq(users.approvalStatus, "pending")
     ),
     columns: {
       id: true,
@@ -416,7 +455,6 @@ export async function getPendingForumHeads(
     },
     orderBy: (users, { asc }) => [asc(users.createdAt)],
   });
-
   return pendingHeads;
 }
 
@@ -647,18 +685,21 @@ export async function requestStaffForEvent(
 
       // --- START OF FIX ---
       // Step C: Check if this teacher has already been requested for THIS event
-      const existingAssignment = await tx.query.eventStaffAssignments.findFirst({
-        where: and(
-          eq(eventStaffAssignments.eventId, eventId),
-          eq(eventStaffAssignments.userId, teacherUserId)
-        )
-      });
+      const existingAssignment = await tx.query.eventStaffAssignments.findFirst(
+        {
+          where: and(
+            eq(eventStaffAssignments.eventId, eventId),
+            eq(eventStaffAssignments.userId, teacherUserId)
+          ),
+        }
+      );
 
       if (existingAssignment) {
-        throw new Error("This teacher has already been requested for this event.");
+        throw new Error(
+          "This teacher has already been requested for this event."
+        );
       }
       // --- END OF FIX ---
-
 
       // Step D: Find all of the teacher's *approved* assignments to check for time conflicts
       const teacherApprovedAssignments =
@@ -693,20 +734,21 @@ export async function requestStaffForEvent(
 
       // Step F: Create the 'pending' assignment in the join table
       // REMOVED .onConflictDoNothing()
-      await tx
-        .insert(eventStaffAssignments)
-        .values({
-          eventId,
-          userId: teacherUserId,
-          assignmentRole: assignmentRole || "Staff in Charge",
-          status: "pending",
-        });
+      await tx.insert(eventStaffAssignments).values({
+        eventId,
+        userId: teacherUserId,
+        assignmentRole: assignmentRole || "Staff in Charge",
+        status: "pending",
+      });
     });
 
     return { message: "Request has been sent to the teacher successfully." };
   } catch (error: any) {
     // Catch specific, known errors to provide clear feedback
-    if (error.message.includes("already assigned") || error.message.includes("already been requested")) {
+    if (
+      error.message.includes("already assigned") ||
+      error.message.includes("already been requested")
+    ) {
       return reply.code(409).send({ error: error.message }); // 409 Conflict
     }
     if (
@@ -852,7 +894,10 @@ export async function getVenuesForForumHead(
  * [NEW] Handles the GET /users/teachers route for Forum Heads.
  * Fetches a list of all approved teachers in the user's college, with optional search.
  */
-export async function getTeachersForForumHead(request: FastifyRequest, reply: FastifyReply) {
+export async function getTeachersForForumHead(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
   const { collegeId } = request.user;
   const { search } = request.query as { search?: string };
 
@@ -889,3 +934,303 @@ export async function getTeachersForForumHead(request: FastifyRequest, reply: Fa
   return teachers;
 }
 
+/**
+ * Handles POST /events/:eventId/collaborators
+ * An event organizer requests a collaboration with another forum.
+ */
+export async function requestCollaboration(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { id: organizerId, collegeId } = request.user;
+  const { eventId } = request.params as { eventId: string };
+  const { collaboratingForumId } = request.body as {
+    collaboratingForumId: string;
+  };
+
+  if (!collaboratingForumId) {
+    return reply
+      .code(400)
+      .send({ error: "Collaborating forum ID is required." });
+  }
+
+  try {
+    const event = await db.query.events.findFirst({
+      where: eq(events.id, eventId),
+    });
+
+    if (!event) {
+      return reply.code(404).send({ error: "Event not found." });
+    }
+    // Authorization: Only the original event organizer can request collaborators
+    if (event.organizerId !== organizerId) {
+      return reply.code(403).send({
+        error: "Forbidden: Only the event organizer can add collaborators.",
+      });
+    }
+    if (event.forumId === collaboratingForumId) {
+      return reply
+        .code(400)
+        .send({ error: "Cannot collaborate with your own forum." });
+    }
+
+    // Check if collaboration request already exists
+    const existingRequest = await db.query.eventCollaborators.findFirst({
+      where: and(
+        eq(eventCollaborators.eventId, eventId),
+        eq(eventCollaborators.collaboratingForumId, collaboratingForumId)
+      ),
+    });
+
+    if (existingRequest) {
+      return reply
+        .code(409)
+        .send({ error: "Collaboration request already sent." });
+    }
+
+    // Create the collaboration request
+    const [newCollaboration] = await db
+      .insert(eventCollaborators)
+      .values({
+        eventId,
+        collaboratingForumId,
+        status: "pending",
+      })
+      .returning();
+
+    return reply.code(201).send(newCollaboration);
+  } catch (error: any) {
+    console.error("Error requesting collaboration:", error);
+    return reply.code(500).send({ error: "An unexpected error occurred." });
+  }
+}
+
+/**
+ * Handles GET /collaborations/pending
+ * Fetches pending collaboration requests for forums the user is a head of.
+ */
+export async function getPendingCollaborations(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { id: userId } = request.user;
+
+  // Find which forums the current user is a head of
+  const userForumAssignments = await db.query.forum_heads.findMany({
+    where: and(
+      eq(forum_heads.userId, userId),
+      eq(forum_heads.isVerified, true)
+    ),
+    columns: { forumId: true },
+  });
+
+  if (userForumAssignments.length === 0) {
+    return []; // Not a head of any forums
+  }
+
+  const forumIds = userForumAssignments.map((a) => a.forumId);
+
+  // Find pending collaboration requests for these forums
+  const pendingRequests = await db.query.eventCollaborators.findMany({
+    where: and(
+      inArray(eventCollaborators.collaboratingForumId, forumIds),
+      eq(eventCollaborators.status, "pending")
+    ),
+    with: {
+      event: {
+        columns: { name: true, startTime: true },
+        with: {
+          forum: {
+            // The forum that is requesting the collaboration
+            columns: { name: true },
+          },
+        },
+      },
+    },
+  });
+
+  return pendingRequests;
+}
+
+/**
+ * Handles PUT /collaborations/:collaborationId/respond
+ * Allows a forum head to accept or reject a collaboration request.
+ */
+export async function respondToCollaboration(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { id: userId } = request.user;
+  const { collaborationId } = request.params as { collaborationId: string };
+  const { status } = request.body as { status: "accepted" | "rejected" };
+
+  if (!["accepted", "rejected"].includes(status)) {
+    return reply.code(400).send({ error: "Invalid status provided." });
+  }
+
+  // Find the collaboration request
+  const collaboration = await db.query.eventCollaborators.findFirst({
+    where: eq(eventCollaborators.id, collaborationId),
+  });
+
+  if (!collaboration || collaboration.status !== "pending") {
+    return reply
+      .code(404)
+      .send({ error: "Pending collaboration request not found." });
+  }
+
+  // Security Check: Verify user is a head of the target forum
+  const isForumHead = await db.query.forum_heads.findFirst({
+    where: and(
+      eq(forum_heads.userId, userId),
+      eq(forum_heads.forumId, collaboration.collaboratingForumId),
+      eq(forum_heads.isVerified, true)
+    ),
+  });
+
+  if (!isForumHead) {
+    return reply.code(403).send({
+      error: "Forbidden: You are not a head of the collaborating forum.",
+    });
+  }
+
+  // Update the status
+  const [updatedCollaboration] = await db
+    .update(eventCollaborators)
+    .set({ status })
+    .where(eq(eventCollaborators.id, collaborationId))
+    .returning();
+
+  return updatedCollaboration;
+}
+
+/**
+ * Handles DELETE /events/:eventId/collaborators/:collaboratorForumId
+ * Allows the event organizer to remove a collaborating forum.
+ */
+export async function removeCollaborator(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { id: organizerId } = request.user;
+  const { eventId, collaboratorForumId } = request.params as {
+    eventId: string;
+    collaboratorForumId: string;
+  };
+
+  const event = await db.query.events.findFirst({
+    where: eq(events.id, eventId),
+  });
+  if (!event) {
+    return reply.code(404).send({ error: "Event not found." });
+  }
+  if (event.organizerId !== organizerId) {
+    return reply.code(403).send({
+      error: "Forbidden: Only the event organizer can remove collaborators.",
+    });
+  }
+
+  await db
+    .delete(eventCollaborators)
+    .where(
+      and(
+        eq(eventCollaborators.eventId, eventId),
+        eq(eventCollaborators.collaboratingForumId, collaboratorForumId)
+      )
+    );
+
+  return { message: "Collaborator removed successfully." };
+}
+
+/**
+ * Handles the GET /events/by-month route.
+ * Fetches events for a specific month and year for the user's college.
+ */
+export async function getEventsByMonth(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { collegeId } = request.user;
+  const { year, month } = request.query as { year: string; month: string };
+
+  if (!collegeId) {
+    return reply
+      .code(403)
+      .send({ error: "Forbidden: No college associated with this account." });
+  }
+
+  if (!year || !month) {
+    return reply.code(400).send({ error: "Year and month are required." });
+  }
+
+  const yearNum = parseInt(year);
+  const monthNum = parseInt(month) - 1; // JS months are 0-indexed
+
+  // Calculate the start and end of the month
+  const startDate = new Date(yearNum, monthNum, 1);
+  const endDate = new Date(yearNum, monthNum + 1, 0, 23, 59, 59);
+
+  const monthlyEvents = await db.query.events.findMany({
+    where: and(
+      eq(events.collegeId, collegeId),
+      gte(events.startTime, startDate),
+      lte(events.startTime, endDate) // Use lte for the end of the month
+    ),
+    with: {
+      venue: { columns: { name: true } },
+    },
+    orderBy: (events, { asc }) => [asc(events.startTime)],
+  });
+
+  return monthlyEvents;
+}
+
+/**
+ * Handles the GET /events/yearly-activity route.
+ * Aggregates and returns the count of events for each day of a given year.
+ */
+export async function getYearlyEventActivity(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { collegeId } = request.user;
+  const { year } = request.query as { year: string };
+
+  if (!collegeId) {
+    return reply
+      .code(403)
+      .send({ error: "Forbidden: No college associated with this account." });
+  }
+
+  const targetYear = year ? parseInt(year) : new Date().getFullYear();
+  const startDate = new Date(targetYear, 0, 1);
+  const endDate = new Date(targetYear, 11, 31, 23, 59, 59);
+
+  try {
+    const result: { date: string; count: string }[] = await db
+      .select({
+        date: sql<string>`DATE("start_time")`,
+        count: sql<string>`count(id)`,
+      })
+      .from(events)
+      .where(
+        and(
+          eq(events.collegeId, collegeId),
+          gte(events.startTime, startDate),
+          lte(events.startTime, endDate)
+        )
+      )
+      .groupBy(sql`DATE("start_time")`);
+
+    // Convert the result to the format expected by the frontend
+    const activityData = result.map((item) => ({
+      date: item.date,
+      count: parseInt(item.count, 10),
+    }));
+
+    return activityData;
+  } catch (error) {
+    console.error("Error fetching yearly event activity:", error);
+    return reply.code(500).send({ error: "Failed to fetch event activity." });
+  }
+}
