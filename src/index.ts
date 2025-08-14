@@ -10,6 +10,9 @@ import forumRoutes from "./routes/forumRoutes";
 import teacherRoutes from "./routes/teacherRoutes";
 import publicRoutes from "./routes/publicRoutes";
 
+
+dotenv.config();
+
 const app = fastify({});
 
 app.register(fastifyJwt, {
