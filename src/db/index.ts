@@ -15,7 +15,7 @@ if (!connectionString) {
 // Create the connection
 const client = postgres(connectionString,{
   ssl:{
-    ca: fs.readFileSync("../../ca.pem").toString(),
+    rejectUnauthorized: false
   }
 });
 
