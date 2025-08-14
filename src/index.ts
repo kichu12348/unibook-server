@@ -10,17 +10,6 @@ import forumRoutes from "./routes/forumRoutes";
 import teacherRoutes from "./routes/teacherRoutes";
 import publicRoutes from "./routes/publicRoutes";
 
-import {
-  verifyCollegeAdmin,
-  verifySuperAdmin,
-  verifyForumHead,
-  verifyTeacher,
-} from "./middlewares/checkRole";
-import { verifyToken } from "./middlewares/authMiddleware";
-import { checkHasPaid } from "./middlewares/checkHasPaid";
-
-dotenv.config();
-
 const app = fastify({});
 
 app.register(fastifyJwt, {
