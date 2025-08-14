@@ -11,7 +11,7 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL!,
     ssl:{
-      rejectUnauthorized: false,
+      ca: fs.readFileSync('./ca.pem').toString(),
     }
   },
 
