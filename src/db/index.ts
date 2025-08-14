@@ -15,7 +15,8 @@ if (!connectionString) {
 // Create the connection
 const client = postgres(connectionString,{
   ssl:{
-    rejectUnauthorized: false
+    rejectUnauthorized: true,
+    ca: process.env.CA_CERT
   }
 });
 

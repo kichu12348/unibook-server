@@ -1,6 +1,5 @@
 import { defineConfig } from "drizzle-kit";
 import * as dotenv from "dotenv";
-import fs from "fs";
 
 dotenv.config();
 
@@ -11,7 +10,8 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL!,
     ssl:{
-      rejectUnauthorized: false
+      rejectUnauthorized: true,
+      ca:process.env.CA_CERT
     }
   },
 
