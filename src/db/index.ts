@@ -13,11 +13,8 @@ if (!connectionString) {
 }
 
 // Create the connection
-const client = postgres(connectionString,{
-  ssl:{
-    rejectUnauthorized: true,
-    ca: process.env.CA_CERT
-  }
+const client = postgres(connectionString, {
+  ssl: true,
 });
 
 // Create the database instance
