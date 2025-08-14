@@ -13,9 +13,7 @@ if (!connectionString) {
 }
 
 // Create the connection
-const client = postgres(connectionString, {
-  ssl: true,
-});
+const client = postgres(connectionString);
 
 // Create the database instance
 export const db = drizzle(client, { schema });
