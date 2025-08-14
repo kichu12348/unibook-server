@@ -2,6 +2,7 @@ import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import * as dotenv from "dotenv";
 import * as schema from "./schema";
+import fs from "fs";
 
 dotenv.config();
 
@@ -12,7 +13,11 @@ if (!connectionString) {
 }
 
 // Create the connection
-const client = postgres(connectionString);
+const client = postgres(connectionString,{
+  ssl:{
+    ca: fs.readFileSync("../../ca.pem").toString(),
+  }
+});
 
 // Create the database instance
 export const db = drizzle(client, { schema });
