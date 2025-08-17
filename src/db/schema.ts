@@ -103,6 +103,12 @@ export const users = pgTable(
       mode: "date",
     }),
 
+    // Password reset token and expiration
+    passwordResetToken: text("password_reset_token"),
+    passwordResetExpires: timestamp("password_reset_expires", {
+      mode: "date",
+    }),
+
     // Foreign key to the college table
     collegeId: uuid("college_id")
       .notNull()

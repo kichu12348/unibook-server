@@ -189,6 +189,7 @@ export async function login(request: FastifyRequest, reply: FastifyReply) {
       error:
         "Your account is not verified. Please complete the OTP verification process.",
       code: "NOT_VERIFIED",
+      email: user.email,
     });
   }
 
@@ -277,4 +278,155 @@ export async function getMe(request: FastifyRequest, reply: FastifyReply) {
   }
 
   return userProfile;
+}
+
+export async function resendOtp(request: FastifyRequest, reply: FastifyReply) {
+  const { email } = request.body as { email: string };
+
+  if (!email) {
+    return reply.code(400).send({ error: "Email is required." });
+  }
+
+  const user = await db.query.users.findFirst({
+    where: eq(users.email, email),
+  });
+
+  if (!user) {
+    // to have a field day with dem heckers
+    console.log(`Resend OTP request for non-existent user: ${email}`);
+    return reply.code(200).send({
+      message: "otp sent",
+    });
+  }
+
+  // Generate a new OTP and expiration
+  const otp = Math.floor(1000 + Math.random() * 9000).toString();
+  console.log(`Resending OTP for ${email}: ${otp}`);
+  const expires = new Date(Date.now() + 10 * 60 * 1000);
+  const hashedOtp = await bcrypt.hash(otp, 10);
+
+  await db
+    .update(users)
+    .set({
+      emailVerificationToken: hashedOtp,
+      emailVerificationExpires: expires,
+    })
+    .where(eq(users.id, user.id));
+
+  await sendOtpEmail(user.email, otp);
+
+  return reply.code(200).send({
+    message: "A new verification code has been sent to your email.",
+  });
+}
+
+export async function forgotPassword(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { email } = request.body as { email: string };
+  if (!email) {
+    return reply.code(400).send({ error: "Email is required." });
+  }
+
+  const user = await db.query.users.findFirst({ where: eq(users.email, email) });
+
+  // Prevent user enumeration
+  if (!user) {
+    return reply.code(200).send({
+      message: "reset code has been sent.",
+    });
+  }
+
+  const otp = Math.floor(1000 + Math.random() * 9000).toString();
+  const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+  const hashedOtp = await bcrypt.hash(otp, 10);
+
+  await db
+    .update(users)
+    .set({ passwordResetToken: hashedOtp, passwordResetExpires: expires })
+    .where(eq(users.id, user.id));
+
+  await sendOtpEmail(user.email, otp);
+
+  console.log(`Forgot password OTP for ${user.email}: ${otp}`);
+
+  return reply.code(200).send({
+    message: "A password reset code has been sent to your email.",
+  });
+}
+
+export async function verifyResetOtp(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { email, otp } = request.body as { email: string; otp: string };
+  if (!email || !otp) {
+    return reply.code(400).send({ error: "Email and OTP are required." });
+  }
+
+  const user = await db.query.users.findFirst({
+    where: and(
+      eq(users.email, email),
+      gt(users.passwordResetExpires, new Date())
+    ),
+  });
+
+  if (!user || !user.passwordResetToken) {
+    return reply.code(400).send({ error: "Invalid OTP or request has expired." });
+  }
+
+  const isOtpValid = await bcrypt.compare(otp, user.passwordResetToken);
+
+  if (!isOtpValid) {
+    return reply.code(400).send({ error: "Invalid OTP." });
+  }
+
+  return reply.code(200).send({ message: "OTP verified successfully." });
+}
+
+export async function resetPassword(
+  request: FastifyRequest,
+  reply: FastifyReply
+) {
+  const { email, otp, password } = request.body as {
+    email: string;
+    otp: string;
+    password: string;
+  };
+
+  if (!email || !otp || !password) {
+    return reply
+      .code(400)
+      .send({ error: "Email, OTP, and new password are required." });
+  }
+  const user = await db.query.users.findFirst({
+    where: and(
+      eq(users.email, email),
+      gt(users.passwordResetExpires, new Date())
+    ),
+  });
+
+  if (!user || !user.passwordResetToken) {
+    return reply.code(400).send({ error: "Invalid OTP or request has expired." });
+  }
+
+  const isOtpValid = await bcrypt.compare(otp, user.passwordResetToken);
+
+  if (!isOtpValid) {
+    return reply.code(400).send({ error: "Invalid OTP." });
+  }
+
+  // Hash the new password
+  const newPasswordHash = await bcrypt.hash(password, 10);
+  await db
+    .update(users)
+    .set({
+      passwordHash: newPasswordHash,
+      passwordResetToken: null,
+      passwordResetExpires: null,
+    })
+    .where(eq(users.id, user.id));
+
+  return reply.code(200).send({ message: "Password has been reset successfully." });
 }

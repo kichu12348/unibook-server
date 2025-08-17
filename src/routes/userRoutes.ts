@@ -4,6 +4,10 @@ import {
   registerUser,
   verifyOtpAndLogin,
   login,
+  resendOtp,
+  forgotPassword,
+  resetPassword,
+  verifyResetOtp,
 } from "../controllers/userController";
 import { verifyToken } from "../middlewares/authMiddleware";
 
@@ -97,6 +101,7 @@ const loginSchema = {
       properties: {
         error: { type: "string" },
         code: { type: "string" },
+        email: { type: "string", optional: true },
       },
     },
     404: {
@@ -110,6 +115,49 @@ const loginSchema = {
       properties: {
         error: { type: "string" },
       },
+    },
+  },
+};
+
+const resendOtpSchema = {
+  body: {
+    type: "object",
+    required: ["email"],
+    properties: {
+      email: { type: "string", format: "email" },
+    },
+  },
+};
+
+const forgotPasswordSchema = {
+  body: {
+    type: "object",
+    required: ["email"],
+    properties: {
+      email: { type: "string", format: "email" },
+    },
+  },
+};
+
+const verifyResetOtpSchema = {
+  body: {
+    type: "object",
+    required: ["email", "otp"],
+    properties: {
+      email: { type: "string", format: "email" },
+      otp: { type: "string" },
+    },
+  },
+};
+
+const resetPasswordSchema = {
+  body: {
+    type: "object",
+    required: ["email", "otp", "password"],
+    properties: {
+      email: { type: "string", format: "email" },
+      otp: { type: "string" },
+      password: { type: "string", minLength: 8 },
     },
   },
 };
@@ -138,6 +186,26 @@ export default async function userRoutes(app: FastifyInstance): Promise<void> {
     },
     login
   );
+
+  app.post(
+    "/resend-otp",
+    {
+      schema: resendOtpSchema,
+    },
+    resendOtp
+  );
+
+  app.post(
+    "/forgot-password",
+    { schema: forgotPasswordSchema },
+    forgotPassword
+  );
+  app.post(
+    "/verify-reset-otp",
+    { schema: verifyResetOtpSchema },
+    verifyResetOtp
+  );
+  app.post("/reset-password", { schema: resetPasswordSchema }, resetPassword);
 
   app.get(
     "/me",
