@@ -14,9 +14,9 @@ if (!connectionString) {
 
 // Create the connection
 const client = postgres(connectionString,{
-  // ssl:{
-  //   rejectUnauthorized: false
-  // }
+  ssl:{
+    rejectUnauthorized: false
+  }
 });
 
 // Create the database instance
