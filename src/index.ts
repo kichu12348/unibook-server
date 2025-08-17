@@ -1,6 +1,6 @@
 import fastify from "fastify";
 import fastifyJwt from "@fastify/jwt";
-import * as dotenv from "dotenv";
+import dotenv from "dotenv";
 import { db } from "./db";
 
 import userRoutes from "./routes/userRoutes";
@@ -10,8 +10,9 @@ import forumRoutes from "./routes/forumRoutes";
 import teacherRoutes from "./routes/teacherRoutes";
 import publicRoutes from "./routes/publicRoutes";
 
-
-dotenv.config();
+if (process.env.NODE_ENV !== "production") {
+  dotenv.config();
+}
 
 const app = fastify({});
 
